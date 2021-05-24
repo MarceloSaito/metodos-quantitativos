@@ -1,0 +1,321 @@
+---
+title: "Exercício 3"
+author: "Marcelo Saito"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: 
+        html_document:
+                highlight: textmate
+                theme: journal
+                number_sections: no
+                toc: yes
+                toc_float: yes
+                collapsed: yes
+                smooth_scroll: yes
+---
+
+# Indicando diretório
+
+```{r}
+
+getwd()
+
+setwd("C:/Users/mn_sa/Documents/R/Version control/metodos-quantitativos/exercicio_3")
+
+```
+
+# Carregando bibs
+
+```{r, message=FALSE, warning=FALSE}
+
+library(dplyr)
+library(ggplot2)
+library(scales)
+library(srvyr)
+library(readr)
+library(dummies)
+
+```
+
+# Importando dados e aplicando estratificação
+
+
+```{r}
+
+unzip("PNAD_COVID_052020.zip")
+
+pnad_maio <- readr::read_csv("PNAD_COVID_052020.csv", col_types = cols(.default = "d")) %>% 
+        srvyr::as_survey_design(ids = UPA, strata = Estrato, weights = V1032, nest = TRUE)
+
+```
+
+# Vizualização {.tabset}
+
+## Head
+
+```{r}
+head(pnad_maio)
+
+```
+## dplyr::Glimpse
+
+```{r}
+
+dplyr::glimpse(pnad_maio)
+
+```
+
+## Summary
+
+```{r}
+
+summary(pnad_maio)
+
+```
+
+# Criando variáveis: código adaptado de [Regis A. Ely](http://regisely.com/blog/mercado-de-trabalho-covid/)
+```{r}
+
+pnad_maio <- pnad_maio %>% 
+        mutate(one = 1,
+       Sexo = ifelse(A003 == 1, "Homem", "Mulher"), 
+       Idade = case_when(
+               A002 %in% 15:24 ~ "15-24",
+               A002 %in% 25:34 ~ "25-34", 
+               A002 %in% 35:49 ~ "35-49", 
+               A002 %in% 50:64 ~ "50-64", 
+               A002 > 64 ~ "65+"),
+       Cor = case_when(
+               A004 == 1 ~ "Branca", 
+               A004 == 2 ~ "Preta", 
+               A004 == 4 ~ "Parda"),
+       Escolaridade = factor(case_when( 
+               A005 %in% 1:2 ~ "Sem Instrução ou Fundamental Incompleto", 
+               A005 %in% 3:4 ~ "Fundamental completo ou Médio Incompleto", 
+               A005 %in% 5:6 ~ "Médio completo ou Superior Incompleto", 
+               A005 == 7 ~ "Superior completo", 
+               A005 == 8 ~ "Pós-graduação"), 
+               levels = c( "Sem Instrução ou Fundamental Incompleto",
+                           "Fundamental completo ou Médio Incompleto", 
+                           "Médio completo ou Superior Incompleto",
+                           "Superior completo",
+                           "Pós-graduação")), 
+       Tipo_emprego = factor(case_when(
+               C007 == 1 ~ "Trabalhador doméstico (empregado doméstico, cuidados, babá)",
+               C007 == 2 ~ "Militar",
+               C007 == 3 ~ "Policial ou Bombeiro",
+               C007 == 4 ~ "Setor privado",
+               C007 == 5 ~ "Setor público",
+               C007 == 6 ~ "Empregador",
+               C007 == 7 ~ "Autônomo (Conta própria)"),
+               levels = c( "Trabalhador doméstico (empregado doméstico, cuidados, babá)",
+                           "Militar", 
+                           "Policial ou Bombeiro",
+                           "Setor privado",
+                           "Setor público",
+                           "Empregador",
+                           "Autônomo (Conta própria)")), 
+       Faixa_salario = factor(case_when(
+               C01012 <= 1044 ~ "Menos de um salário mínimo",
+               C01012 %in% c(1045:2090) ~ "Entre 1 e 2",
+               C01012 %in% c(2091:3135) ~ "Entre 2 e 3",
+               C01012 %in% c(3136:4180) ~ "Entre 3 e 4",
+               C01012 %in% c(4181:5225) ~ "Entre 4 e 5",
+               C01012 >= 5226 ~ "Mais de 5"),
+               levels = c("Menos de um salário mínimo",
+                          "Entre 1 e 2",
+                          "Entre 2 e 3",
+                          "Entre 3 e 4",
+                          "Entre 4 e 5",
+                          "Mais de 5")),
+       domicilio_situacao = factor(case_when(
+               F001 == 1 ~ "Próprio - já pago",
+               F001 == 2 ~ "Próprio - ainda pagando" ,                                  
+               F001 == 3 ~ "Alugado",
+               F001 %in% 4:6 ~ "Cedido (Por empregador, Familiar ou outro)"),
+               levels = c("Próprio - já pago",
+                          "Próprio - ainda pagando",
+                          "Alugado", 
+                          "Cedido (Por empregador, Familiar ou outro)")),
+       home_office = ifelse(C013 == 1, "Home Office", "Presencial"),
+       auxilio_emergencial = ifelse(D0051 == 1, "Auxílio", "Sem auxílio"),
+)
+
+```
+
+
+# Construa uma variável dummy para gênero (mulher=1 e homem=0)  
+
+
+```{r}
+
+dum_gen <- pnad_maio %>% 
+        dplyr::mutate(sexo_dummy = ifelse(
+               A003 == 1, 0, 1)) %>% 
+        as_tibble()%>%
+        select(sexo_dummy)
+
+dum_gen
+
+```
+
+# Construa uma variável dummy para cor/raça (branco==1 e preto/pardo=0)
+
+```{r}
+dum_cor <- pnad_maio %>% 
+        dplyr::mutate(cor_dummy = case_when(
+               A004 == 1 ~ 1,
+               A004 == 2 | 4 ~ 0)) %>% 
+        as_tibble()%>%
+        select(cor_dummy)
+
+dum_cor
+
+```
+# Construa uma variável dummy para escolaridade (fundamental incompleto, fundamental completo, superior incompleto, superior completo)
+
+```{r}
+dum_esc <- pnad_maio %>% 
+        dplyr::mutate(dum_fund_inc = ifelse(A005 == 2, 1, 0),
+                      dum_fund_comp = ifelse(A005 == 3, 1, 0),
+                      dum_sup_incomp = ifelse(A005 == 6, 1, 0),
+                      dum_sup_comp = ifelse(A005 == 6, 1, 0)
+                      ) %>%
+        as_tibble()%>%
+        select(dum_fund_inc, dum_fund_comp, dum_sup_incomp, dum_sup_comp)
+
+dum_esc
+
+
+
+```
+
+
+# Encontre o número de pessoas ocupadas
+```{r}
+
+pnad_ocupados <- pnad_maio %>%
+        filter(C007 != 9 & !is.na(C007)) %>% 
+        summarise(ocupados =  survey_total(C001 == 1 | C002 == 1, na.rm = TRUE)) %>%
+        drop_na() %>% 
+        as_tibble() %>% 
+        ungroup()
+                                       
+pnad_ocupados
+```
+# Encontre o número de pessoas desocupadas
+```{r}
+pnad_desocupados <- pnad_maio %>%
+        summarise(desocupados =  survey_total(C015 == 1, na.rm = TRUE)) %>%
+        drop_na() %>% 
+        as_tibble() %>% 
+        ungroup()
+
+pnad_desocupados
+
+```
+# Encontre a taxa de desemprego
+```{r}
+
+taxa_desemprego <-  full_join(pnad_desocupados, pnad_ocupados, by = character()) %>% 
+        mutate(taxa_desemprego = (desocupados / (ocupados + desocupados)) * 100) %>%
+        drop_na() %>% 
+        ungroup()
+
+taxa_desemprego
+
+```
+# Encontre a taxa de desemprego por gênero
+```{r}
+
+ocupados_sexo <- pnad_maio %>% 
+        group_by(Sexo) %>%
+        filter(C007 != 9 & !is.na(C007)) %>% 
+        summarise(ocupados =  survey_total(C001 == 1 | C002 == 1, na.rm = TRUE)) %>%
+        drop_na() %>% 
+        as_tibble() %>% 
+        ungroup()
+
+desocupados_sexo <- pnad_maio %>%
+        group_by(Sexo) %>% 
+        summarise(desocupados =  survey_total(C015 == 1, na.rm = TRUE)) %>%
+        drop_na() %>% 
+        as_tibble() %>% 
+        ungroup()
+       
+taxa_desemprego_sexo <-  full_join(ocupados_sexo, desocupados_sexo, by = "Sexo") %>% 
+        mutate(taxa_desemprego = round(desocupados / (ocupados + desocupados), 4) * 100) %>%
+        drop_na() %>% 
+        ungroup()
+
+taxa_desemprego_sexo
+
+```
+# Encontre a taxa de desemprego por cor/raça
+```{r}
+ocupados_cor <- pnad_maio %>% 
+        group_by(Cor) %>%
+        filter(C007 != 9 & !is.na(C007)) %>% 
+        summarise(ocupados =  survey_total(C001 == 1 | C002 == 1, na.rm = TRUE)) %>%
+        drop_na() %>% 
+        as_tibble() %>% 
+        ungroup()
+
+desocupados_cor <- pnad_maio %>%
+        group_by(Cor) %>% 
+        summarise(desocupados =  survey_total(C015 == 1, na.rm = TRUE)) %>%
+        drop_na() %>% 
+        as_tibble() %>% 
+        ungroup()
+       
+taxa_desemprego_cor <-  full_join(ocupados_cor, desocupados_cor, by = "Cor") %>% 
+        mutate(taxa_desemprego = round(desocupados / (ocupados + desocupados), 4) * 100) %>%
+        drop_na() %>% 
+        ungroup() 
+
+taxa_desemprego_cor
+```
+# Encontre a taxa de desemprego por nível de escolaridade
+```{r}
+ocupados_escolaridade <- pnad_maio %>% 
+        group_by(Escolaridade) %>%
+        filter(C007 != 9 & !is.na(C007)) %>% 
+        summarise(ocupados =  survey_total(C001 == 1 | C002 == 1, na.rm = TRUE)) %>%
+        drop_na() %>% 
+        as_tibble() %>% 
+        ungroup()
+
+desocupados_escolaridade <- pnad_maio %>%
+        group_by(Escolaridade) %>% 
+        summarise(desocupados =  survey_total(C015 == 1, na.rm = TRUE)) %>%
+        drop_na() %>% 
+        as_tibble() %>% 
+        ungroup()
+       
+taxa_desemprego_escolaridade <-  full_join(ocupados_escolaridade, desocupados_escolaridade, by = "Escolaridade") %>% 
+        mutate(taxa_desemprego = round(desocupados / (ocupados + desocupados), 4) * 100) %>%
+        drop_na() %>% 
+        ungroup() 
+
+taxa_desemprego_escolaridade
+```
+# Repita o mesmo procedimento para descobrir a proporção da população ocupada e não afastada que estava trabalhando remotamente (home office), segundo gênero, cor/raça e escolaridade.
+```{r paged.print=TRUE}
+home_variaveis <- pnad_maio %>%
+        group_by(Sexo, Cor, Escolaridade) %>%
+        filter(C007 != 9 & !is.na(C007)) %>%
+        summarise(
+                home_office = survey_total(C013 == 1, na.rm = TRUE),
+                ocupados_nafastado =  survey_total(C001 == 1, na.rm = TRUE)
+                ) %>%
+        mutate("Home Office (%)" = round((home_office / ocupados_nafastado) * 100), 4) %>%
+        ungroup() %>% 
+        select(Sexo, Cor, Escolaridade, "Home Office (%)") %>% 
+        drop_na() 
+
+rmarkdown::paged_table(home_variaveis) 
+
+```
+
+
+
+

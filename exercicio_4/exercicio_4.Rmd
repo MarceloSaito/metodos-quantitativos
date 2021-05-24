@@ -1,0 +1,167 @@
+---
+title: "Exercício 4"
+author: "Marcelo Saito"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: 
+        html_document:
+                highlight: textmate
+                theme: journal
+                number_sections: no
+                toc: yes
+                toc_float: yes
+                collapsed: yes
+                smooth_scroll: yes
+---
+
+# A partir da PNAD COVID-19 do mês de maio de 2020:
+
+# Indicando diretório
+
+```{r}
+
+getwd()
+
+setwd("C:/Users/mn_sa/Documents/R/Version control/metodos-quantitativos/exercicio_4")
+
+```
+
+## pacotes
+
+```{r message=FALSE, warning=FALSE}
+library(dplyr)
+library(ggplot2)
+library(scales)
+library(srvyr)
+library(readr)
+library(dummies)
+
+```
+## Importação da base
+
+```{r}
+pnad_maio <- readr::read_csv("PNAD_COVID_052020.csv", col_types = cols(.default = "d")) %>% 
+        srvyr::as_survey_design(ids = UPA, strata = Estrato, weights = V1032, nest = TRUE)
+
+options(scipen = 999) # desativa notação científica
+```
+# Criando variáveis: código adaptado de [Regis A. Ely](http://regisely.com/blog/mercado-de-trabalho-covid/)
+```{r}
+
+pnad_maio <- pnad_maio %>% 
+        mutate(one = 1,
+       Sexo = ifelse(A003 == 1, "Homem", "Mulher"), 
+       Idade = case_when(
+               A002 %in% 15:24 ~ "15-24",
+               A002 %in% 25:34 ~ "25-34", 
+               A002 %in% 35:49 ~ "35-49", 
+               A002 %in% 50:64 ~ "50-64", 
+               A002 > 64 ~ "65+"),
+       Cor = case_when(
+               A004 == 1 ~ "Branca", 
+               A004 == 2 ~ "Preta", 
+               A004 == 4 ~ "Parda"),
+       Escolaridade = factor(case_when( 
+               A005 %in% 1:2 ~ "Sem Instrução ou Fundamental Incompleto", 
+               A005 %in% 3:4 ~ "Fundamental completo ou Médio Incompleto", 
+               A005 %in% 5:6 ~ "Médio completo ou Superior Incompleto", 
+               A005 == 7 ~ "Superior completo", 
+               A005 == 8 ~ "Pós-graduação"), 
+               levels = c( "Sem Instrução ou Fundamental Incompleto",
+                           "Fundamental completo ou Médio Incompleto", 
+                           "Médio completo ou Superior Incompleto",
+                           "Superior completo",
+                           "Pós-graduação")), 
+       Tipo_emprego = factor(case_when(
+               C007 == 1 ~ "Trabalhador doméstico (empregado doméstico, cuidados, babá)",
+               C007 == 2 ~ "Militar",
+               C007 == 3 ~ "Policial ou Bombeiro",
+               C007 == 4 ~ "Setor privado",
+               C007 == 5 ~ "Setor público",
+               C007 == 6 ~ "Empregador",
+               C007 == 7 ~ "Autônomo (Conta própria)"),
+               levels = c( "Trabalhador doméstico (empregado doméstico, cuidados, babá)",
+                           "Militar", 
+                           "Policial ou Bombeiro",
+                           "Setor privado",
+                           "Setor público",
+                           "Empregador",
+                           "Autônomo (Conta própria)")), 
+       Faixa_salario = factor(case_when(
+               C01012 <= 1044 ~ "Menos de um salário mínimo",
+               C01012 %in% c(1045:2090) ~ "Entre 1 e 2",
+               C01012 %in% c(2091:3135) ~ "Entre 2 e 3",
+               C01012 %in% c(3136:4180) ~ "Entre 3 e 4",
+               C01012 %in% c(4181:5225) ~ "Entre 4 e 5",
+               C01012 >= 5226 ~ "Mais de 5"),
+               levels = c("Menos de um salário mínimo",
+                          "Entre 1 e 2",
+                          "Entre 2 e 3",
+                          "Entre 3 e 4",
+                          "Entre 4 e 5",
+                          "Mais de 5")),
+       domicilio_situacao = factor(case_when(
+               F001 == 1 ~ "Próprio - já pago",
+               F001 == 2 ~ "Próprio - ainda pagando" ,                                  
+               F001 == 3 ~ "Alugado",
+               F001 %in% 4:6 ~ "Cedido (Por empregador, Familiar ou outro)"),
+               levels = c("Próprio - já pago",
+                          "Próprio - ainda pagando",
+                          "Alugado", 
+                          "Cedido (Por empregador, Familiar ou outro)")),
+       home_office = ifelse(C013 == 1, "Home Office", "Presencial"),
+       auxilio_emergencial = ifelse(D0051 == 1, "Auxílio", "Sem auxílio"),
+)
+```
+
+## Encontre a remuneração média e o seu desvio padrão no país.
+
+
+```{r}
+
+
+renda_sd <- pnad_maio %>% 
+        summarise(remuneracao_media = mean(C011A12, na.rm = TRUE),
+                  remuneracao_desvio = sd(C011A12, na.rm = TRUE))
+        
+renda_sd
+```
+
+## Encontre a remuneração média de homens e mulheres
+
+```{r}
+renda_sexo <- pnad_maio %>% 
+        group_by(Sexo) %>% 
+        summarise(remuneracao_media = mean(C011A12, na.rm = TRUE)) %>% 
+        ungroup()
+        
+renda_sexo
+```
+## Encontre a remuneração média dos seguintes subgrupos populacionais: homem branco, homem negro (pardos e pretos), mulher branca e mulher negra 
+```{r}
+renda_sexo_cor <- pnad_maio %>% 
+        group_by(Sexo, Cor) %>% 
+        summarise(remuneracao_media = mean(C011A12, na.rm = TRUE)) %>% 
+        ungroup()
+
+renda_sexo_cor
+```
+## Encontre a remuneração média e o seu desvio padrão para cada posição na ocupação
+
+```{r}
+renda_posicao <- pnad_maio %>%
+        group_by(Tipo_emprego) %>% 
+        summarise(remuneracao_media = mean(C011A12, na.rm = TRUE),
+                  remuneracao_desvio = sd(C011A12, na.rm = TRUE))
+        
+renda_posicao
+```
+## Qual posição na ocupação apresenta o maior desvio padrão: trabalhador privado com carteira assinada ou trabalhador por conta própria? Interprete.
+
+```{r}
+
+
+
+```
+
+
+

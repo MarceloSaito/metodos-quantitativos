@@ -1,0 +1,137 @@
+---
+title: "Exercício 2"
+author: "Marcelo Saito"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: 
+        html_document:
+                highlight: textmate
+                theme: journal
+                number_sections: no
+                toc: yes
+                toc_float: yes
+                collapsed: yes
+                smooth_scroll: yes
+---
+# Carregando os pacotes
+
+```{r, message=FALSE, warning=FALSE}
+
+library(dplyr)
+library(ggplot2)
+library(scales)
+
+```
+
+# Importando dados
+
+```{r}
+
+dados <- haven::read_dta("vereadorsp.dta", encoding = "latin1")
+
+```
+# Visualização dos dados {.tabset}
+
+## Glimpse
+```{r}
+dplyr::glimpse(dados)
+
+```
+## Head
+```{r}
+kableExtra::kable(head(dados, 10)) %>% 
+        kableExtra::kable_styling(full_width = TRUE, 
+                                  bootstrap_options = c("striped", "hover", "condensed", "responsive"),
+                                  position = "center")
+```
+## Summary
+```{r}
+summary(dados)
+
+```
+
+
+# Quantos votos cada partido político recebeu? {.tabset}
+
+## Tabela
+
+```{r}
+votos_por_partido <- dados %>% 
+        dplyr::group_by(Partido) %>% 
+        dplyr::summarise(votos_partido = sum(votos, na.rm = TRUE)) %>% 
+        dplyr::arrange(desc(votos_partido)) 
+
+rmarkdown::paged_table(votos_por_partido)
+
+```
+## Gráfico
+
+```{r}
+  ggplot2::ggplot(votos_por_partido) +
+        ggplot2::geom_bar(aes(x = reorder(Partido, -votos_partido),
+                              y = votos_partido),
+                          stat = "identity") +
+        ggplot2::theme(axis.text.x = element_text(size = 7, angle = 90, vjust = 0.5)) +
+        ggplot2::scale_y_continuous(labels = comma_format(big.mark = ".",
+                                                          decimal.mark = ","),
+                                    breaks = seq(0, 800000, by = 100000),
+                                    expand = expansion(mult = c(0, 0.01))) +
+        ggplot2::labs(title = "Votos por partido no município de São Paulo em 2012",
+                      x = NULL,
+                      y = NULL
+                      )
+        
+```  
+
+# Qual foi o partido que mais gastou com campanha? {.tabset}
+
+## Tabela
+
+```{r}
+gasto_partido <- dados %>% 
+        dplyr::group_by(Partido) %>% 
+        dplyr::summarise(gasto_campanha = sum(campanha, na.rm = TRUE)) %>% 
+        dplyr::arrange(desc(gasto_campanha))
+
+rmarkdown::paged_table(gasto_partido) 
+```
+## Gráfico
+
+```{r}
+ggplot2::ggplot(gasto_partido) +
+        ggplot2::geom_bar(aes(x = reorder(Partido, -gasto_campanha),
+                              y = gasto_campanha),
+                          stat = "identity") +
+        ggplot2::theme(axis.text.x = element_text(size = 7, angle = 90, vjust = 0.5)) +
+        ggplot2::scale_y_continuous(labels = comma_format(big.mark = ".",
+                                                          decimal.mark = ","),
+                                    breaks = seq(0, 30000000, by = 2000000),
+                                    expand = expansion(mult = c(0, 0.01))) +
+        ggplot2::labs(title = "Gasto por partido no município de São Paulo em 2012 (R$)",
+                     x = NULL,
+                     y = NULL 
+                     )
+```  
+
+# Encontre a quantidade de cadeiras ocupadas por cada partido na Câmara de Vereadores
+
+```{r}
+cadeiras_ocupadas <- dados %>% 
+        dplyr::group_by(Partido) %>% 
+        dplyr::filter(Situacao == "Eleito por QP" | Situacao == "Eleito por media") %>%
+        dplyr::summarise(cadeiras_partido = n()) %>% 
+        dplyr::arrange(desc(cadeiras_partido))
+
+rmarkdown::paged_table(cadeiras_ocupadas)
+
+```
+# A princípio, todos os candidatos não eleitos para vereador se tornaram suplentes da Câmara de Vereadores. Os suplentes podem ou não assumir, a depender da quantidade de eleitos afastados que renunciam ou assumem outro cargo. A lista de suplentes é por partido e a ordem é dada pela quantidade de votos. Considere que um eleito de cada partido seja afastado, encontre os suplentes que assumiriam cargo de vereador.
+
+```{r}
+assumem <- dados %>% 
+        dplyr::group_by(Partido) %>% 
+        dplyr::filter(Situacao == "Suplente") %>% 
+        dplyr::slice(which.max(votos))
+
+kableExtra::kable(assumem) %>%
+        kableExtra::kable_styling(full_width = FALSE, bootstrap_options = c("striped", "hover", "condensed", "responsive"))
+```
